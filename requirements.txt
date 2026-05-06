@@ -1,0 +1,4 @@
+requests==2.31.0
+beautifulsoup4==4.12.3
+colorama==0.4.6
+pyTelegramBotAPI==4.15.4
