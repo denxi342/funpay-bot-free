@@ -4,7 +4,7 @@ import os
 import threading
 from datetime import datetime
 from colorama import init, Fore, Style
-from config import GOLDEN_KEY, USER_AGENT, TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_ID, GEMINI_API_KEY
+from config import GOLDEN_KEY, USER_AGENT, TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_ID, GEMINI_API_KEY, PROXY
 from funpay import FunPayClient
 try:
     from tg_bot import TelegramManager
@@ -50,7 +50,9 @@ def main():
         log("Ошибка: Пожалуйста, укажите ваш 'golden_key' в файле config.py", color=Fore.RED)
         return
 
-    client = FunPayClient(GOLDEN_KEY, USER_AGENT)
+    # Настраиваем прокси для curl_cffi
+    proxies = {"http": PROXY, "https": PROXY} if PROXY else None
+    client = FunPayClient(GOLDEN_KEY, USER_AGENT, proxies=proxies)
     
     log("Получаем данные пользователя...", color=Fore.CYAN)
     is_authorized, result = client.check_authorization()
@@ -159,7 +161,8 @@ def main():
                 except Exception as e:
                     log(f"Ошибка в poll_updates: {e}", color=Fore.RED)
                     
-                time.sleep(25) # Проверяем каждые 25 секунд
+                # Максимально безопасный интервал (1-3 минуты), чтобы имитировать человека
+                time.sleep(random.randint(60, 180)) 
                 
         threading.Thread(target=poll_updates, daemon=True).start()
     else:
@@ -171,11 +174,12 @@ def main():
     def keep_online():
         while True:
             try:
-                # Отправляем запрос на главную страницу для обновления статуса
-                client.session.get(f"{client.base_url}/", timeout=10)
+                # Отправляем запрос на главную страницу через браузер
+                client.page.goto(f"{client.base_url}/", wait_until="domcontentloaded", timeout=30000)
             except Exception:
                 pass
-            time.sleep(180) # Каждые 3 минуты
+            # Рандом 3-7 минут
+            time.sleep(random.randint(180, 420)) 
             
     threading.Thread(target=keep_online, daemon=True).start()
     log("Модуль 'Вечный онлайн' активирован 🟢", color=Fore.GREEN)
@@ -208,12 +212,13 @@ def main():
                         else:
                             log(f"[BUMPER] {cat['name']} | ❌ {msg}", color=Fore.RED)
             
-            # Интервал между проверками (каждые 30-60 секунд)
-            time.sleep(random.randint(30, 60))
+            # Интервал между проверками (каждые 2-5 минут)
+            time.sleep(random.randint(120, 300))
 
     except KeyboardInterrupt:
         print("\n")
-        log("Бот остановлен пользователем.", color=Fore.RED)
+        log("Бот остановлен пользователем. Закрываем браузер...", color=Fore.RED)
+        client.close()
 
 if __name__ == "__main__":
     if os.name == 'nt':
