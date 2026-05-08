@@ -212,6 +212,7 @@ def main():
                         chat_id = tg_manager.settings.get('needs_chat_details')
                         log(f"Получен запрос на подробности чата {chat_id}...", level="INFO")
                         details = client.get_chat_details(chat_id)
+                        log(f"Отправляю подробности чата {chat_id} в ТГ...", level="INFO")
                         tg_manager.send_chat_details(chat_id, details)
                     except Exception as e:
                         log(f"Ошибка при загрузке деталей чата: {e}", level="ERROR")

@@ -12,6 +12,16 @@ def browser_action(func):
     """Декоратор для обеспечения потокобезопасности при работе с браузером."""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
+        if not self.playwright or not self.context or not self.page:
+            self.start_browser()
+        
+        # Проверка, не закрыта ли страница
+        try:
+            if self.page.is_closed():
+                self.start_browser()
+        except:
+            self.start_browser()
+
         if self.offline: return func(self, *args, **kwargs)
         with self.browser_lock:
             return func(self, *args, **kwargs)
@@ -185,7 +195,7 @@ class FunPayClient:
     def get_stats(self):
         if self.offline: return {"balance": "100.00 ₽", "unread_chats": "0", "active_sales": "0"}
         try:
-            self.page.goto(f"{self.base_url}/", wait_until="domcontentloaded")
+            self.page.goto(f"{self.base_url}/", wait_until="domcontentloaded", timeout=60000)
             html = self.page.content()
             soup = BeautifulSoup(html, 'html.parser')
             
@@ -208,7 +218,7 @@ class FunPayClient:
         if self.offline: return True, 0
         if not self.user_id: return False, "User ID не найден"
         try:
-            self.page.goto(f"{self.base_url}/users/{self.user_id}/", wait_until="networkidle")
+            self.page.goto(f"{self.base_url}/users/{self.user_id}/", wait_until="networkidle", timeout=60000)
             links = self.page.query_selector_all('a')
             category_urls = set()
             import re
@@ -225,7 +235,7 @@ class FunPayClient:
             
             for url, name in category_urls:
                 trade_url = url.rstrip('/') + '/trade'
-                self.page.goto(trade_url, wait_until="domcontentloaded")
+                self.page.goto(trade_url, wait_until="domcontentloaded", timeout=60000)
                 btn = self.page.query_selector('button.js-lot-raise')
                 if btn:
                     game_id = btn.get_attribute('data-game')
@@ -322,7 +332,7 @@ class FunPayClient:
         """Парсит список последних чатов."""
         if self.offline: return []
         try:
-            self.page.goto(f"{self.base_url}/chat/", wait_until="domcontentloaded", timeout=20000)
+            self.page.goto(f"{self.base_url}/chat/", wait_until="domcontentloaded", timeout=60000)
             # Пытаемся подождать список, но не падаем если его нет
             try:
                 self.page.wait_for_selector(".contact-item", timeout=5000)
@@ -358,7 +368,7 @@ class FunPayClient:
     def get_new_messages(self):
         if self.offline: return []
         try:
-            self.page.goto(f"{self.base_url}/chat/", wait_until="domcontentloaded")
+            self.page.goto(f"{self.base_url}/chat/", wait_until="domcontentloaded", timeout=60000)
             html = self.page.content()
             soup = BeautifulSoup(html, 'html.parser')
             new_msgs = []
@@ -406,7 +416,7 @@ class FunPayClient:
     def get_active_orders(self):
         if self.offline: return []
         try:
-            self.page.goto(f"{self.base_url}/orders/trade", wait_until="domcontentloaded")
+            self.page.goto(f"{self.base_url}/orders/trade", wait_until="domcontentloaded", timeout=60000)
             soup = BeautifulSoup(self.page.content(), 'html.parser')
             orders = []
             for item in soup.find_all('a', class_='tc-item'):
@@ -436,7 +446,7 @@ class FunPayClient:
     def mark_chat_read(self, chat_id):
         if self.offline: return True
         try:
-            self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded")
+            self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded", timeout=60000)
             return True
         except: return False
 
@@ -445,7 +455,7 @@ class FunPayClient:
         """Парсит подробности чата: историю и инфо о юзере."""
         if self.offline: return {"messages": [{"user": "System", "text": "Offline Mode"}], "user_info": None}
         try:
-            self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded")
+            self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded", timeout=60000)
             # Ждем появления сообщений, но не падаем если их нет (пустой чат)
             try:
                 self.page.wait_for_selector(".chat-msg", timeout=3000)
