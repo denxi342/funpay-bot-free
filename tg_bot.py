@@ -173,13 +173,9 @@ class TelegramManager:
 
             elif data.startswith("chat_"):
                 chat_id = data.replace("chat_", "")
-                self.bot.answer_callback_query(call.id, "🔄 Открываю чат...")
-                # Можно добавить детализацию чата тут
-                text = f"💬 <b>Чат #{chat_id}</b>\n\nДля ответа используйте кнопку ниже или напишите ID чата в сообщении."
-                markup = InlineKeyboardMarkup()
-                markup.add(InlineKeyboardButton("✍️ Ответить", callback_data=f"reply_{chat_id}"))
-                markup.add(InlineKeyboardButton("⬅️ К списку чатов", callback_data="menu_chats"))
-                self.bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+                self.bot.answer_callback_query(call.id, "🔄 Загружаю историю и профиль...")
+                self.settings['needs_chat_details'] = chat_id
+                self.save_settings()
 
             elif data == "menu_stats":
                 self.bot.answer_callback_query(call.id, "📊 Собираю актуальные данные...")
@@ -306,18 +302,61 @@ class TelegramManager:
             self.bot.send_message(self.admin_id, "⚠️ Не удалось загрузить список чатов или он пуст.")
             return
 
-        text = "<b>💬 Список активных чатов</b>\n\nВыберите диалог для управления:"
+        text = "<b>💬 Менеджер диалогов</b>\n\nЗдесь собраны ваши последние переписки. Выберите чат, чтобы прочитать историю или ответить."
         markup = InlineKeyboardMarkup(row_width=1)
         
         for chat in chats:
-            # Обрезаем сообщение, чтобы кнопка не была слишком широкой
-            msg_snippet = (chat['last_msg'][:25] + '..') if len(chat['last_msg']) > 25 else chat['last_msg']
-            unread_tag = "🔴 " if chat['unread'] else ""
-            btn_text = f"{unread_tag}{chat['name']}: {msg_snippet}"
+            unread = "🔴 " if chat['unread'] else "⚪️ "
+            # Обрезаем сообщение
+            msg = chat['last_msg'][:30] + ".." if len(chat['last_msg']) > 30 else chat['last_msg']
+            btn_text = f"{unread}{chat['name']}: {msg}"
             markup.add(InlineKeyboardButton(btn_text, callback_data=f"chat_{chat['id']}"))
         
-        markup.add(InlineKeyboardButton("⬅️ Назад", callback_data="menu_main"))
+        markup.add(InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_main"))
         self.bot.send_message(self.admin_id, text, reply_markup=markup)
+
+    def send_chat_details(self, chat_id, details):
+        def escape(text):
+            return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+        if "error" in details:
+            self.bot.send_message(self.admin_id, f"❌ Ошибка загрузки чата: {details['error']}")
+            return
+
+        # Инфо о пользователе
+        u = details.get('user_info')
+        user_header = ""
+        if u:
+            risk_icon = "⚠️" if u['is_new'] else "✅"
+            user_header = f"👤 <b>Профиль:</b> {escape(u['reg_date'])}\n⭐️ <b>Отзывы:</b> {u['reviews']} | {risk_icon} <b>Риск:</b> {'Высокий' if u['is_new'] else 'Низкий'}\n\n"
+
+        # История сообщений
+        history = "📜 <b>История сообщений:</b>\n"
+        if not details['messages']:
+            history += "<i>(История пуста)</i>\n"
+        else:
+            for m in details['messages']:
+                prefix = "➡️" if m['is_our'] else "⬅️"
+                author = "Вы" if m['is_our'] else escape(m['user'])
+                msg_text = escape(m['text'])
+                history += f"<b>{prefix} {author}:</b> {msg_text}\n"
+        
+        full_text = (
+            f"💬 <b>Чат #{chat_id}</b>\n"
+            f"————————————————\n"
+            f"{user_header}"
+            f"{history}"
+            f"————————————————"
+        )
+        
+        markup = InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            InlineKeyboardButton("✍️ Ответить", callback_data=f"reply_{chat_id}"),
+            InlineKeyboardButton("🤖 AI-Ответ", callback_data=f"ai_reply_{chat_id}"),
+            InlineKeyboardButton("⬅️ К списку", callback_data="menu_chats"),
+            InlineKeyboardButton("🔄 Обновить", callback_data=f"chat_{chat_id}")
+        )
+        self.bot.send_message(self.admin_id, full_text, reply_markup=markup)
 
     def send_stats_menu(self, stats):
         text = (

@@ -264,6 +264,14 @@ def main():
                     tg_manager.send_chat_list(chats)
                     tg_manager.settings['needs_chat_list'] = False
                 
+                if tg_manager.settings.get('needs_chat_details'):
+                    chat_id = tg_manager.settings.get('needs_chat_details')
+                    log(f"Получен запрос на подробности чата {chat_id}...", level="INFO")
+                    details = client.get_chat_details(chat_id)
+                    tg_manager.send_chat_details(chat_id, details)
+                    tg_manager.settings['needs_chat_details'] = False
+                    tg_manager.save_settings()
+                
                 if tg_manager.settings.get('needs_stats'):
                     log("Получен запрос на расширенную статистику...", level="INFO")
                     stats_base = client.get_stats()

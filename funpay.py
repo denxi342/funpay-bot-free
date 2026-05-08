@@ -435,6 +435,37 @@ class FunPayClient:
         except: return False
 
     @browser_action
+    def get_chat_details(self, chat_id):
+        """Парсит подробности чата: историю и инфо о юзере."""
+        if self.offline: return {"messages": [{"user": "System", "text": "Offline Mode"}], "user_info": None}
+        try:
+            self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded")
+            # Ждем появления сообщений
+            self.page.wait_for_selector(".chat-msg", timeout=5000)
+            
+            html = self.page.content()
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Парсим сообщения (последние 10)
+            messages = []
+            for msg_div in soup.select(".chat-msg")[-10:]:
+                user_div = msg_div.select_one(".chat-msg-author")
+                text_div = msg_div.select_one(".chat-msg-text")
+                if user_div and text_div:
+                    messages.append({
+                        "user": user_div.text.strip(),
+                        "text": text_div.text.strip(),
+                        "is_our": "chat-msg-out" in msg_div.get("class", [])
+                    })
+            
+            # Получаем инфо о пользователе
+            user_info = self.get_user_info(chat_id=chat_id)
+            
+            return {"messages": messages, "user_info": user_info}
+        except Exception as e:
+            return {"error": str(e)}
+
+    @browser_action
     def get_user_info(self, chat_id=None, user_id=None):
         """Парсит информацию о пользователе для оценки рисков."""
         if self.offline: return {"reg_date": "01.01.2000", "reviews": 999, "is_new": False}
