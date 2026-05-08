@@ -231,6 +231,8 @@ def main():
                         
                         if tg_manager and tg_manager.settings.get('notifications'):
                             tg_manager.notify_new_message(msg)
+                        
+                        client.last_seen_messages[msg['chat_id']] = msg['msg_id']
                 
                 # Проверка новых заказов
                 orders = client.get_new_orders()
@@ -248,6 +250,8 @@ def main():
                     
                     if tg_manager and tg_manager.settings.get('notifications'):
                         tg_manager.notify_new_order(order)
+                    
+                    client.seen_orders.add(order['order_id'])
                 
                 LAST_POLL_TIME = time.time()
 

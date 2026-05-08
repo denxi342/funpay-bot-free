@@ -376,7 +376,6 @@ class FunPayClient:
                     if not is_first_run:
                         user = contact.find('div', class_='media-user-name').text.strip()
                         new_msgs.append({'chat_id': node_id, 'msg_id': msg_id, 'user': user, 'text': text})
-                    self.last_seen_messages[node_id] = msg_id
             return new_msgs
         except: return []
 
@@ -425,7 +424,6 @@ class FunPayClient:
         new = []
         for o in all_active:
             if o['order_id'] not in self.seen_orders:
-                self.seen_orders.add(o['order_id'])
                 new.append(o)
         return new
 
