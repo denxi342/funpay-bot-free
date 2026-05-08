@@ -1,6 +1,8 @@
 import time
 import random
 import threading
+import os
+import json
 from datetime import datetime
 from colorama import init, Fore, Back, Style
 from config import GOLDEN_KEY, USER_AGENT, TG_TOKEN, ADMIN_ID, GEMINI_API_KEY, PROXY, WORK_START_HOUR, WORK_END_HOUR, OFFLINE_MODE
