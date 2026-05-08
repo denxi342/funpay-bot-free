@@ -171,7 +171,8 @@ def main():
             # Если появились срочные задачи из ТГ - прерываем сон
             if tg_manager:
                 if tg_manager.settings.get('needs_chat_list') or tg_manager.settings.get('force_bump') or \
-                   tg_manager.settings.get('needs_stats') or tg_manager.settings.get('pending_tasks'):
+                   tg_manager.settings.get('needs_stats') or tg_manager.settings.get('pending_tasks') or \
+                   tg_manager.settings.get('needs_chat_details'):
                     return True # Сигнал, что нужно проснуться
             time.sleep(1)
         return False
