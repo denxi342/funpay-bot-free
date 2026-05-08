@@ -298,6 +298,9 @@ class TelegramManager:
         self.bot.send_message(self.admin_id, text + "\n\n" + text_menu, reply_markup=markup)
 
     def send_chat_list(self, chats):
+        def escape(text):
+            return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
         if not chats:
             self.bot.send_message(self.admin_id, "⚠️ Не удалось загрузить список чатов или он пуст.")
             return
@@ -307,13 +310,18 @@ class TelegramManager:
         
         for chat in chats:
             unread = "🔴 " if chat['unread'] else "⚪️ "
-            # Обрезаем сообщение
-            msg = chat['last_msg'][:30] + ".." if len(chat['last_msg']) > 30 else chat['last_msg']
-            btn_text = f"{unread}{chat['name']}: {msg}"
+            # Обрезаем сообщение и экранируем
+            name = escape(chat['name'])
+            msg_raw = chat['last_msg'] if chat['last_msg'] else "..."
+            msg = escape(msg_raw[:30] + ".." if len(msg_raw) > 30 else msg_raw)
+            btn_text = f"{unread}{name}: {msg}"
             markup.add(InlineKeyboardButton(btn_text, callback_data=f"chat_{chat['id']}"))
         
         markup.add(InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_main"))
-        self.bot.send_message(self.admin_id, text, reply_markup=markup)
+        try:
+            self.bot.send_message(self.admin_id, text, reply_markup=markup)
+        except Exception as e:
+            self.log(f"Ошибка отправки списка чатов: {e}", level="ERROR")
 
     def send_chat_details(self, chat_id, details):
         def escape(text):

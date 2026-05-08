@@ -195,6 +195,65 @@ def main():
                 log("Вернулся с перерыва.", level="SUCCESS")
                 continue
 
+            if tg_manager:
+                # Проверка флагов
+                if tg_manager.settings.get('needs_chat_list'):
+                    try:
+                        log("Получен запрос на список чатов из ТГ...", level="INFO")
+                        chats = client.get_chat_list()
+                        tg_manager.send_chat_list(chats)
+                    except Exception as e:
+                        log(f"Ошибка при обработке списка чатов: {e}", level="ERROR")
+                    finally:
+                        tg_manager.settings['needs_chat_list'] = False
+                
+                if tg_manager.settings.get('needs_chat_details'):
+                    try:
+                        chat_id = tg_manager.settings.get('needs_chat_details')
+                        log(f"Получен запрос на подробности чата {chat_id}...", level="INFO")
+                        details = client.get_chat_details(chat_id)
+                        tg_manager.send_chat_details(chat_id, details)
+                    except Exception as e:
+                        log(f"Ошибка при загрузке деталей чата: {e}", level="ERROR")
+                    finally:
+                        tg_manager.settings['needs_chat_details'] = False
+                        tg_manager.save_settings()
+                
+                if tg_manager.settings.get('needs_stats'):
+                    log("Получен запрос на расширенную статистику...", level="INFO")
+                    stats_base = client.get_stats()
+                    if stats_manager_instance:
+                        data = stats_manager_instance.get_aggregated_data()
+                        if data:
+                            html = stats_manager_instance.generate_html(data)
+                            photo_path = client.render_dashboard(html)
+                            if photo_path:
+                                tg_manager.send_advanced_stats(photo_path, data['metrics'])
+                            else:
+                                tg_manager.send_stats_menu(stats_base)
+                        else:
+                            tg_manager.send_stats_menu(stats_base)
+                    else:
+                        tg_manager.send_stats_menu(stats_base)
+                    tg_manager.settings['needs_stats'] = False
+
+                # Обработка очереди задач (Возвраты, Ответы и т.д.)
+                tasks = tg_manager.settings.get('pending_tasks', [])
+                if tasks:
+                    tg_manager.settings['pending_tasks'] = [] # Очищаем очередь сразу
+                    for task in tasks:
+                        t_type = task['type']
+                        t_id = task['id']
+                        if t_type == 'refund':
+                            log(f"Выполняю ВОЗВРАТ по заказу #{t_id}...", level="WARNING")
+                            ok, res = client.refund_order(t_id)
+                            msg = f"✅ Возврат #{t_id} выполнен!" if ok else f"❌ Ошибка возврата #{t_id}: {res}"
+                            tg_manager.bot.send_message(tg_manager.admin_id, msg)
+                        elif t_type == 'manual_reply':
+                            log(f"Отправляю ручной ответ в чат {t_id}...", level="INFO")
+                            ok, res = client.send_message(t_id, task['text'])
+                    tg_manager.save_settings()
+
             # 2. Мониторинг (Сообщения и Заказы) - Каждые 60-120 сек
             if now - LAST_POLL_TIME > random.randint(60, 120):
                 # Проверка сообщений
@@ -255,81 +314,6 @@ def main():
                     client.seen_orders.add(order['order_id'])
                 
                 LAST_POLL_TIME = time.time()
-
-            # 1.5. Запросы данных из Telegram (Чаты, Стата, Задачи и т.д.)
-            if tg_manager:
-                # Проверка флагов
-                if tg_manager.settings.get('needs_chat_list'):
-                    log("Получен запрос на список чатов из ТГ...", level="INFO")
-                    chats = client.get_chat_list()
-                    tg_manager.send_chat_list(chats)
-                    tg_manager.settings['needs_chat_list'] = False
-                
-                if tg_manager.settings.get('needs_chat_details'):
-                    chat_id = tg_manager.settings.get('needs_chat_details')
-                    log(f"Получен запрос на подробности чата {chat_id}...", level="INFO")
-                    details = client.get_chat_details(chat_id)
-                    tg_manager.send_chat_details(chat_id, details)
-                    tg_manager.settings['needs_chat_details'] = False
-                    tg_manager.save_settings()
-                
-                if tg_manager.settings.get('needs_stats'):
-                    log("Получен запрос на расширенную статистику...", level="INFO")
-                    stats_base = client.get_stats()
-                    
-                    if stats_manager_instance:
-                        data = stats_manager_instance.get_aggregated_data()
-                        if data:
-                            html = stats_manager_instance.generate_html(data)
-                            photo_path = client.render_dashboard(html)
-                            if photo_path:
-                                tg_manager.send_advanced_stats(photo_path, data['metrics'])
-                            else:
-                                tg_manager.send_stats_menu(stats_base)
-                        else:
-                            tg_manager.send_stats_menu(stats_base)
-                    else:
-                        tg_manager.send_stats_menu(stats_base)
-                        
-                    tg_manager.settings['needs_stats'] = False
-
-                # Обработка очереди задач (Возвраты, Ответы и т.д.)
-                tasks = tg_manager.settings.get('pending_tasks', [])
-                if tasks:
-                    tg_manager.settings['pending_tasks'] = [] # Очищаем очередь сразу
-                    for task in tasks:
-                        t_type = task['type']
-                        t_id = task['id']
-                        
-                        if t_type == 'refund':
-                            log(f"Выполняю ВОЗВРАТ по заказу #{t_id}...", level="WARNING")
-                            ok, res = client.refund_order(t_id)
-                            msg = f"✅ Возврат #{t_id} выполнен!" if ok else f"❌ Ошибка возврата #{t_id}: {res}"
-                            tg_manager.bot.send_message(tg_manager.admin_id, msg)
-                            
-                        elif t_type == 'manual_reply':
-                            log(f"Отправляю ручной ответ в чат {t_id}...", level="INFO")
-                            ok, res = client.send_message(t_id, task['text'])
-                            msg = f"✅ Сообщение в чат {t_id} отправлено!" if ok else f"❌ Ошибка отправки в чат {t_id}: {res}"
-                            tg_manager.bot.send_message(tg_manager.admin_id, msg)
-                            if ok: client.mark_chat_read(t_id)
-
-                        elif t_type == 'ai_reply':
-                            log(f"Генерирую ИИ-ответ для чата {t_id} по запросу...", level="BOT")
-                            # Для этого нам нужен текст последнего сообщения
-                            # Мы можем просто перечитать чат
-                            try:
-                                client.page.goto(f"{client.base_url}/chat/?node={t_id}", wait_until="domcontentloaded")
-                                last_msg_text = client.page.query_selector(".chat-msg-text").inner_text()
-                                ai_answer = ai.process_message({'chat_id': t_id, 'user': 'Покупатель', 'text': last_msg_text}, [])
-                                if ai_answer:
-                                    ok, res = client.send_message(t_id, ai_answer)
-                                    msg = f"🤖 ИИ ответил в чат {t_id}:\n{ai_answer}" if ok else f"❌ Ошибка ИИ-ответа: {res}"
-                                    tg_manager.bot.send_message(tg_manager.admin_id, msg)
-                            except Exception as e:
-                                tg_manager.bot.send_message(tg_manager.admin_id, f"❌ Ошибка генерации ИИ: {e}")
-
-                    tg_manager.save_settings()
 
             # 3. Автоподнятие лотов
             force_bump = tg_manager.settings.get('force_bump') if tg_manager else False

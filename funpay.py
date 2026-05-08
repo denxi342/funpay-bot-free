@@ -322,15 +322,22 @@ class FunPayClient:
         """Парсит список последних чатов."""
         if self.offline: return []
         try:
-            self.page.goto(f"{self.base_url}/chat/", wait_until="domcontentloaded", timeout=30000)
-            # Ждем загрузки списка контактов
-            self.page.wait_for_selector(".contact-item", timeout=10000)
+            self.page.goto(f"{self.base_url}/chat/", wait_until="domcontentloaded", timeout=20000)
+            # Пытаемся подождать список, но не падаем если его нет
+            try:
+                self.page.wait_for_selector(".contact-item", timeout=5000)
+            except:
+                pass
             
             html = self.page.content()
             soup = BeautifulSoup(html, 'html.parser')
             chats = []
             
-            for contact in soup.find_all('a', class_='contact-item')[:limit]:
+            items = soup.find_all('a', class_='contact-item')
+            if not items:
+                return []
+
+            for contact in items[:limit]:
                 node_id = contact.get('data-id')
                 user_name = contact.find('div', class_='media-user-name').text.strip()
                 msg_div = contact.find('div', class_='contact-item-message')
@@ -344,8 +351,7 @@ class FunPayClient:
                     'unread': unread
                 })
             return chats
-        except Exception as e:
-            # Не используем self.log тут, чтобы не зависеть от main.py, просто возвращаем ошибку
+        except Exception:
             return []
 
     @browser_action
