@@ -8,6 +8,15 @@ env/
 *.egg-info/
 *.dist-info/
 config.py
+bot_settings.json
+bump_state.json
+sales.json
+user_data/
+*.png
+*.html
+*.txt
+!README.md
+!requirements.txt
 
 # OS / IDE
 Thumbs.db

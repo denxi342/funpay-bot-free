@@ -14,9 +14,9 @@ class AIResponder:
         self.cache = {}        # normalized_question -> answer
         
         if self.api_key:
-            self.log("[+] Модуль ИИ-Автоответчика загружен (OpenRouter)", color=Fore.GREEN)
+            self.log("[+] Модуль ИИ-Автоответчика загружен (OpenRouter)", level="SUCCESS")
         else:
-            self.log("[-] ИИ-Автоответчик отключен (нет API ключа)", color=Fore.YELLOW)
+            self.log("[-] ИИ-Автоответчик отключен (нет API ключа)", level="WARNING")
             
         self.critical_triggers = ['возврат', 'бан', 'обман', 'манибэк', 'скам', 'мошенник']
         self.normal_triggers = ['не работает', 'ошибка', 'пароль не подходит', 'не могу зайти', 'не пускает', 'проблема', 'замени', 'неверный', 'не получается']
@@ -163,10 +163,10 @@ class AIResponder:
             return answer
         except requests.exceptions.RequestException as e:
             err_text = e.response.text if (e.response is not None) else str(e)
-            self.log(f"Ошибка OpenRouter API (Сеть): {e} | Детали: {err_text}", color=Fore.RED)
+            self.log(f"Ошибка OpenRouter API (Сеть): {e} | Детали: {err_text}", level="ERROR")
             return None
         except Exception as e:
-            self.log(f"Ошибка OpenRouter API (Внутренняя): {e}", color=Fore.RED)
+            self.log(f"Ошибка OpenRouter API (Внутренняя): {e}", level="ERROR")
             return None
 
     def generate_troubleshooting_response(self, chat_id, user, text, active_orders):
@@ -210,5 +210,5 @@ class AIResponder:
                 answer = answer[1:-1]
             return answer
         except Exception as e:
-            self.log(f"Ошибка генерации ответа ТП: {e}", color=Fore.RED)
+            self.log(f"Ошибка генерации ответа ТП: {e}", level="ERROR")
             return None
