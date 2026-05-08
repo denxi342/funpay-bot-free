@@ -440,23 +440,28 @@ class FunPayClient:
         if self.offline: return {"messages": [{"user": "System", "text": "Offline Mode"}], "user_info": None}
         try:
             self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded")
-            # Ждем появления сообщений
-            self.page.wait_for_selector(".chat-msg", timeout=5000)
+            # Ждем появления сообщений, но не падаем если их нет (пустой чат)
+            try:
+                self.page.wait_for_selector(".chat-msg", timeout=3000)
+            except:
+                pass
             
             html = self.page.content()
             soup = BeautifulSoup(html, 'html.parser')
             
             # Парсим сообщения (последние 10)
             messages = []
-            for msg_div in soup.select(".chat-msg")[-10:]:
-                user_div = msg_div.select_one(".chat-msg-author")
-                text_div = msg_div.select_one(".chat-msg-text")
-                if user_div and text_div:
-                    messages.append({
-                        "user": user_div.text.strip(),
-                        "text": text_div.text.strip(),
-                        "is_our": "chat-msg-out" in msg_div.get("class", [])
-                    })
+            msg_elements = soup.select(".chat-msg")
+            if msg_elements:
+                for msg_div in msg_elements[-10:]:
+                    user_div = msg_div.select_one(".chat-msg-author")
+                    text_div = msg_div.select_one(".chat-msg-text")
+                    if user_div and text_div:
+                        messages.append({
+                            "user": user_div.text.strip(),
+                            "text": text_div.text.strip(),
+                            "is_our": "chat-msg-out" in msg_div.get("class", [])
+                        })
             
             # Получаем инфо о пользователе
             user_info = self.get_user_info(chat_id=chat_id)
