@@ -294,8 +294,8 @@ def main():
                                 tg_manager.bot.send_message(tg_manager.admin_id, "❌ ИИ модуль не настроен (проверьте API ключ)")
                     tg_manager.save_settings()
 
-            # 2. Мониторинг (Сообщения и Заказы) - Каждые 60-120 сек
-            if now - LAST_POLL_TIME > random.randint(60, 120):
+            # 2. Мониторинг (Сообщения и Заказы) - Каждые 30-60 сек
+            if now - LAST_POLL_TIME > random.randint(30, 60):
                 # Проверка сообщений
                 messages = client.get_new_messages()
                 if messages:
@@ -397,7 +397,7 @@ def main():
                         else: log(f"Кулдаун: {cat['name']} ({bump_msg})", level="WARNING")
 
             # 4. Небольшая пауза между итерациями основного цикла
-            smart_sleep(random.randint(20, 45))
+            smart_sleep(random.randint(10, 20))
 
         except Exception as e:
             log(f"Ошибка в основном цикле: {e}", level="ERROR")
