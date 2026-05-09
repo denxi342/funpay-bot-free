@@ -4,6 +4,7 @@ import time
 import json
 import os
 from colorama import Fore
+from datetime import datetime
 
 class TelegramManager:
     def __init__(self, token, admin_id, funpay_client, log_func, ai_responder=None):
@@ -169,6 +170,7 @@ class TelegramManager:
             elif data == "menu_chats":
                 self.bot.answer_callback_query(call.id, "🔍 Загружаю список чатов...")
                 self.settings['needs_chat_list'] = True
+                self.settings['needs_chat_details'] = False # Сбрасываем запрос на конкретный чат
                 self.save_settings()
 
             elif data.startswith("chat_"):
@@ -283,6 +285,34 @@ class TelegramManager:
             self.bot.send_message(self.admin_id, text, reply_markup=markup)
         except Exception as e:
             self.log(f"Ошибка отправки уведомления о сообщении: {e}", level="ERROR")
+
+    def notify_new_review(self, review_data):
+        def escape(text):
+            return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            
+        author = escape(review_data['author'])
+        text_content = escape(review_data['text'])
+        rating = review_data['rating']
+        
+        stars_str = "⭐️" * rating + "🌑" * (5 - rating)
+        
+        text = (
+            f"🌟 <b>[НОВЫЙ ОТЗЫВ]</b>\n"
+            f"————————————————\n"
+            f"👤 <b>Покупатель:</b> <code>{author}</code>\n"
+            f"📊 <b>Оценка:</b> {stars_str}\n"
+            f"📝 <b>Комментарий:</b>\n<blockquote><i>{text_content}</i></blockquote>\n"
+            f"————————————————"
+        )
+        
+        markup = InlineKeyboardMarkup()
+        markup.add(
+            InlineKeyboardButton("🔗 Мой профиль", url=f"https://funpay.com/users/{self.client.user_id}/")
+        )
+        try:
+            self.bot.send_message(self.admin_id, text, reply_markup=markup)
+        except Exception as e:
+            self.log(f"Ошибка отправки уведомления об отзыве: {e}", level="ERROR")
 
     def send_startup_message(self, username, stats):
         text = (

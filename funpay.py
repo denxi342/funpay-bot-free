@@ -34,7 +34,7 @@ class FunPayClient:
         self.proxies = proxies
         self.offline = offline
         self.base_url = "https://funpay.com"
-        self.browser_lock = threading.Lock() # Замок для многопоточности
+        self.browser_lock = threading.RLock() # Замок для многопоточности (RLock позволяет рекурсивные вызовы)
         
         self.playwright = None
         self.context = None
@@ -420,19 +420,32 @@ class FunPayClient:
             soup = BeautifulSoup(self.page.content(), 'html.parser')
             orders = []
             for item in soup.find_all('a', class_='tc-item'):
-                status = item.find('div', class_='tc-status').text.strip()
-                if "Оплачен" in status:
-                    order_id = item.find('div', class_='tc-order').text.strip().replace('#', '')
-                    title = item.find('div', class_='order-desc').find('div').text.strip()
-                    buyer = item.find('div', class_='media-user-name').text.strip()
-                    price = item.find('div', class_='tc-price').text.strip()
-                    order_url = item.get('href')
-                    if order_url and not order_url.startswith('http'):
-                        order_url = self.base_url + order_url
+                try:
+                    status_elem = item.find('div', class_='tc-status')
+                    if not status_elem: continue
+                    status = status_elem.text.strip()
+                    
+                    if "Оплачен" in status or "Paid" in status:
+                        order_id = item.find('div', class_='tc-order').text.strip().replace('#', '')
+                        desc_div = item.find('div', class_='order-desc')
+                        title = desc_div.find('div').text.strip() if desc_div and desc_div.find('div') else "Unknown Title"
                         
-                    orders.append({'order_id': order_id, 'buyer': buyer, 'title': title, 'price': price, 'url': order_url})
+                        buyer_elem = item.find('div', class_='media-user-name')
+                        buyer = buyer_elem.text.strip() if buyer_elem else "Unknown Buyer"
+                        
+                        price_elem = item.find('div', class_='tc-price')
+                        price = price_elem.text.strip() if price_elem else "0"
+                        
+                        order_url = item.get('href')
+                        if order_url and not order_url.startswith('http'):
+                            order_url = self.base_url + order_url
+                            
+                        orders.append({'order_id': order_id, 'buyer': buyer, 'title': title, 'price': price, 'url': order_url})
+                except Exception as e:
+                    pass
             return orders
-        except: return []
+        except Exception as e:
+            return []
 
     @browser_action
     def get_new_orders(self):
@@ -442,6 +455,59 @@ class FunPayClient:
             if o['order_id'] not in self.seen_orders:
                 new.append(o)
         return new
+
+    @browser_action
+    def get_new_reviews(self):
+        if self.offline or not self.user_id: return []
+        try:
+            self.page.goto(f"{self.base_url}/users/{self.user_id}/", wait_until="domcontentloaded", timeout=60000)
+            soup = BeautifulSoup(self.page.content(), 'html.parser')
+            
+            reviews = []
+            
+            # На FunPay отзывы лежат в .review-item (или review-item-row)
+            review_items = soup.find_all('div', class_='review-item')
+            if not review_items:
+                review_items = soup.find_all('div', class_='review-item-row')
+                
+            for item in review_items:
+                try:
+                    review_id = item.get('data-id') or str(hash(item.text))
+                    
+                    author_elem = item.find('div', class_='media-user-name') or item.find('div', class_='review-item-author')
+                    author = author_elem.text.strip() if author_elem else "Unknown"
+                    
+                    text_elem = item.find('div', class_='review-item-text') or item.find('div', class_='review-text')
+                    text = text_elem.text.strip() if text_elem else "Без текста"
+                    
+                    stars = item.find_all('i', class_='fas fa-star')
+                    rating = len(stars) if stars else 5
+                    
+                    reviews.append({
+                        'id': review_id,
+                        'author': author,
+                        'text': text,
+                        'rating': rating
+                    })
+                except Exception:
+                    pass
+            
+            new_reviews = []
+            if not hasattr(self, 'seen_reviews'):
+                self.seen_reviews = set()
+                # Первый запуск — просто запоминаем существующие отзывы
+                for r in reviews:
+                    self.seen_reviews.add(r['id'])
+                return []
+                
+            for r in reviews:
+                if r['id'] not in self.seen_reviews:
+                    new_reviews.append(r)
+                    self.seen_reviews.add(r['id'])
+                    
+            return new_reviews
+        except Exception as e:
+            return []
 
     def mark_chat_read(self, chat_id):
         if self.offline: return True
@@ -458,26 +524,39 @@ class FunPayClient:
             self.page.goto(f"{self.base_url}/chat/?node={chat_id}", wait_until="domcontentloaded", timeout=60000)
             # Ждем появления сообщений, но не падаем если их нет (пустой чат)
             try:
-                self.page.wait_for_selector(".chat-msg", timeout=3000)
+                self.page.wait_for_selector(".chat-msg-item", timeout=3000)
             except:
                 pass
             
             html = self.page.content()
             soup = BeautifulSoup(html, 'html.parser')
             
-            # Парсим сообщения (последние 10)
             messages = []
-            msg_elements = soup.select(".chat-msg")
+            msg_elements = soup.select(".chat-msg-item")
+            last_user = "Unknown"
+            last_is_our = False
+
             if msg_elements:
-                for msg_div in msg_elements[-10:]:
-                    user_div = msg_div.select_one(".chat-msg-author")
+                for msg_div in msg_elements:
                     text_div = msg_div.select_one(".chat-msg-text")
-                    if user_div and text_div:
-                        messages.append({
-                            "user": user_div.text.strip(),
-                            "text": text_div.text.strip(),
-                            "is_our": "chat-msg-out" in msg_div.get("class", [])
-                        })
+                    if not text_div: continue
+                    
+                    author_link = msg_div.select_one(".chat-msg-author-link")
+                    if author_link:
+                        last_user = author_link.text.strip()
+                        last_is_our = f"/{self.user_id}/" in author_link.get("href", "")
+                    else:
+                        user_div = msg_div.select_one(".media-user-name")
+                        if user_div:
+                            last_user = "".join([t for t in user_div.find_all(string=True, recursive=False)]).strip()
+                            last_is_our = False
+                            
+                    messages.append({
+                        "user": last_user,
+                        "text": text_div.text.strip(),
+                        "is_our": last_is_our
+                    })
+                messages = messages[-10:]
             
             # Получаем инфо о пользователе
             user_info = self.get_user_info(chat_id=chat_id)
