@@ -361,6 +361,18 @@ def main():
                     
                     if tg_manager and tg_manager.settings.get('notifications'):
                         tg_manager.notify_new_order(order)
+                        
+                    if tg_manager and tg_manager.settings.get('auto_review_request'):
+                        # Отправка просьбы оставить отзыв
+                        review_msg = tg_manager.settings.get('review_text', "Спасибо за покупку! 🌟 Буду очень благодарен за 5 звезд в отзыве, это сильно поможет мне. Если оставишь хороший отзыв — дам бонус на следующий заказ!")
+                        # На FunPay для новых заказов ID заказа является ID чата
+                        ok, res = client.send_message(order['order_id'], review_msg)
+                        if ok:
+                            log(f"Авто-просьба отзыва отправлена {order['buyer']} (Заказ: {order['order_id']})", level="SUCCESS")
+                            if tg_manager.settings.get('notifications'):
+                                tg_manager.bot.send_message(tg_manager.admin_id, f"💬 Авто-просьба отзыва успешно отправлена покупателю {order['buyer']}!")
+                        else:
+                            log(f"Не удалось отправить авто-просьбу отзыва: {res}", level="ERROR")
                     
                     client.seen_orders.add(order['order_id'])
 

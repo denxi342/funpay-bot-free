@@ -30,6 +30,8 @@ class TelegramManager:
             "auto_respond": True,
             "notifications": True,
             "auto_delivery": False,
+            "auto_review_request": False,
+            "review_text": "Спасибо за покупку! 🌟 Буду очень благодарен за 5 звезд в отзыве, это сильно поможет мне. Если оставишь хороший отзыв — дам бонус на следующий заказ!",
             "anti_scam": True,
             "delivery_configs": {},
             "needs_stats": False,
@@ -105,9 +107,13 @@ class TelegramManager:
             InlineKeyboardButton(f"{status('online_mode')} Вечный онлайн", callback_data="toggle_online_mode"),
             InlineKeyboardButton(f"{status('auto_respond')} ИИ Автоответчик", callback_data="toggle_auto_respond"),
             InlineKeyboardButton(f"{status('notifications')} Уведомления", callback_data="toggle_notifications"),
-            InlineKeyboardButton(f"{status('anti_scam')} Anti-Scam (Риски)", callback_data="toggle_anti_scam"),
-            InlineKeyboardButton("⬅️ Назад", callback_data="menu_main")
+            InlineKeyboardButton(f"{status('anti_scam')} Anti-Scam (Риски)", callback_data="toggle_anti_scam")
         )
+        markup.add(
+            InlineKeyboardButton(f"{status('auto_review_request')} Просьба отзыва", callback_data="toggle_auto_review_request"),
+            InlineKeyboardButton("📝 Текст отзыва", callback_data="change_review_text")
+        )
+        markup.add(InlineKeyboardButton("⬅️ Назад", callback_data="menu_main"))
         return text, markup
 
     def get_delivery_menu(self):
@@ -165,7 +171,7 @@ class TelegramManager:
                 self.settings[key] = not self.settings.get(key, False)
                 self.save_settings()
                 # Возвращаемся в то же меню для обновления индикатора
-                if key in ["auto_bump", "online_mode", "auto_respond", "notifications", "anti_scam"]:
+                if key in ["auto_bump", "online_mode", "auto_respond", "notifications", "auto_review_request", "anti_scam"]:
                     text, markup = self.get_settings_menu()
                 elif key == "auto_delivery":
                     text, markup = self.get_delivery_menu()
@@ -213,6 +219,18 @@ class TelegramManager:
                 chat_id = data.replace("reply_", "")
                 msg = self.bot.send_message(call.message.chat.id, "📝 Введите ваше сообщение для отправки:")
                 self.bot.register_next_step_handler(msg, self.process_manual_reply, chat_id)
+                
+            elif data == "change_review_text":
+                msg = self.bot.send_message(call.message.chat.id, "📝 Отправьте новый текст, который бот будет автоматически отправлять для просьбы отзыва:")
+                self.bot.register_next_step_handler(msg, self.process_change_review_text)
+
+    def process_change_review_text(self, message):
+        if not self.check_admin(message.from_user.id): return
+        self.settings['review_text'] = message.text
+        self.save_settings()
+        self.bot.send_message(self.admin_id, "✅ Текст для авто-просьбы отзыва успешно сохранен!")
+        text, markup = self.get_settings_menu()
+        self.bot.send_message(self.admin_id, text, reply_markup=markup)
 
     def process_manual_reply(self, message, chat_id):
         if not self.check_admin(message.from_user.id): return
