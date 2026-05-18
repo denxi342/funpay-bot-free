@@ -32,6 +32,7 @@ class TelegramManager:
             "auto_delivery": False,
             "auto_review_request": False,
             "review_text": "Спасибо за покупку! 🌟 Буду очень благодарен за 5 звезд в отзыве, это сильно поможет мне. Если оставишь хороший отзыв — дам бонус на следующий заказ!",
+            "alarm_threshold": 0,
             "anti_scam": True,
             "delivery_configs": {},
             "needs_stats": False,
@@ -113,6 +114,8 @@ class TelegramManager:
             InlineKeyboardButton(f"{status('auto_review_request')} Просьба отзыва", callback_data="toggle_auto_review_request"),
             InlineKeyboardButton("📝 Текст отзыва", callback_data="change_review_text")
         )
+        alarm_text = f"🚨 Тревога (от {self.settings.get('alarm_threshold')}₽)" if self.settings.get('alarm_threshold', 0) > 0 else "🚨 Тревога (Выкл)"
+        markup.add(InlineKeyboardButton(alarm_text, callback_data="change_alarm_threshold"))
         markup.add(InlineKeyboardButton("⬅️ Назад", callback_data="menu_main"))
         return text, markup
 
@@ -223,6 +226,23 @@ class TelegramManager:
             elif data == "change_review_text":
                 msg = self.bot.send_message(call.message.chat.id, "📝 Отправьте новый текст, который бот будет автоматически отправлять для просьбы отзыва:")
                 self.bot.register_next_step_handler(msg, self.process_change_review_text)
+                
+            elif data == "change_alarm_threshold":
+                msg = self.bot.send_message(call.message.chat.id, "🚨 Введите сумму заказа (в рублях), при которой будет срабатывать Режим Тревоги (спам уведомлениями для пробуждения).\nВведите 0, чтобы выключить:")
+                self.bot.register_next_step_handler(msg, self.process_change_alarm_threshold)
+
+    def process_change_alarm_threshold(self, message):
+        if not self.check_admin(message.from_user.id): return
+        try:
+            val = int(message.text.strip())
+            self.settings['alarm_threshold'] = val
+            self.save_settings()
+            state = f"включен от {val} руб." if val > 0 else "выключен"
+            self.bot.send_message(self.admin_id, f"✅ Режим Тревоги {state}!")
+        except Exception:
+            self.bot.send_message(self.admin_id, "❌ Пожалуйста, введите только целое число (например: 2000 или 0).")
+        text, markup = self.get_settings_menu()
+        self.bot.send_message(self.admin_id, text, reply_markup=markup)
 
     def process_change_review_text(self, message):
         if not self.check_admin(message.from_user.id): return
@@ -276,6 +296,25 @@ class TelegramManager:
         )
         try:
             self.bot.send_message(self.admin_id, text, reply_markup=markup, disable_web_page_preview=True)
+            
+            # Режим Тревоги
+            threshold = self.settings.get('alarm_threshold', 0)
+            if threshold > 0:
+                try:
+                    price_val = float(order_data['price'].replace('₽', '').replace(' ', '').replace('$', '').replace('€', '').strip())
+                except:
+                    price_val = 0
+                
+                if price_val >= threshold:
+                    import threading
+                    def spam_alarm():
+                        for _ in range(15):
+                            try:
+                                self.bot.send_message(self.admin_id, f"🚨 <b>ПРОСЫПАЙСЯ!</b> Жирный заказ на {order_data['price']} от {buyer}! 🚨")
+                            except: pass
+                            time.sleep(1.5)
+                    threading.Thread(target=spam_alarm, daemon=True).start()
+                    
         except Exception as e:
             self.log(f"Ошибка отправки уведомления о заказе: {e}", level="ERROR")
 
