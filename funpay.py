@@ -448,6 +448,30 @@ class FunPayClient:
             return []
 
     @browser_action
+    def get_closed_orders(self):
+        if self.offline: return []
+        try:
+            self.page.goto(f"{self.base_url}/orders/trade", wait_until="domcontentloaded", timeout=60000)
+            soup = BeautifulSoup(self.page.content(), 'html.parser')
+            orders = []
+            for item in soup.find_all('a', class_='tc-item'):
+                try:
+                    status_elem = item.find('div', class_='tc-status')
+                    if not status_elem: continue
+                    status = status_elem.text.strip()
+                    
+                    if "Закрыт" in status or "Closed" in status:
+                        order_id = item.find('div', class_='tc-order').text.strip().replace('#', '')
+                        buyer_elem = item.find('div', class_='media-user-name')
+                        buyer = buyer_elem.text.strip() if buyer_elem else "Unknown Buyer"
+                        orders.append({'order_id': order_id, 'buyer': buyer})
+                except Exception:
+                    pass
+            return orders
+        except Exception:
+            return []
+
+    @browser_action
     def get_new_orders(self):
         all_active = self.get_active_orders()
         new = []

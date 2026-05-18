@@ -361,20 +361,26 @@ def main():
                     
                     if tg_manager and tg_manager.settings.get('notifications'):
                         tg_manager.notify_new_order(order)
-                        
-                    if tg_manager and tg_manager.settings.get('auto_review_request'):
-                        # Отправка просьбы оставить отзыв
-                        review_msg = tg_manager.settings.get('review_text', "Спасибо за покупку! 🌟 Буду очень благодарен за 5 звезд в отзыве, это сильно поможет мне. Если оставишь хороший отзыв — дам бонус на следующий заказ!")
-                        # На FunPay для новых заказов ID заказа является ID чата
-                        ok, res = client.send_message(order['order_id'], review_msg)
-                        if ok:
-                            log(f"Авто-просьба отзыва отправлена {order['buyer']} (Заказ: {order['order_id']})", level="SUCCESS")
-                            if tg_manager.settings.get('notifications'):
-                                tg_manager.bot.send_message(tg_manager.admin_id, f"💬 Авто-просьба отзыва успешно отправлена покупателю {order['buyer']}!")
-                        else:
-                            log(f"Не удалось отправить авто-просьбу отзыва: {res}", level="ERROR")
                     
                     client.seen_orders.add(order['order_id'])
+
+                # Проверка закрытых заказов (для авто-просьбы отзыва)
+                if tg_manager and tg_manager.settings.get('auto_review_request'):
+                    closed_orders = client.get_closed_orders()
+                    if not hasattr(client, 'seen_closed_orders'):
+                        client.seen_closed_orders = set([o['order_id'] for o in closed_orders])
+                    else:
+                        for co in closed_orders:
+                            if co['order_id'] not in client.seen_closed_orders:
+                                review_msg = tg_manager.settings.get('review_text', "Спасибо за покупку! 🌟 Буду очень благодарен за 5 звезд в отзыве...")
+                                ok, res = client.send_message(co['order_id'], review_msg)
+                                if ok:
+                                    log(f"Просьба отзыва отправлена {co['buyer']} (Заказ закрыт: {co['order_id']})", level="SUCCESS")
+                                    if tg_manager.settings.get('notifications'):
+                                        tg_manager.bot.send_message(tg_manager.admin_id, f"💬 Заказ #{co['order_id']} подтвержден! Авто-просьба отзыва успешно отправлена покупателю {co['buyer']}.")
+                                else:
+                                    log(f"Не удалось отправить просьбу отзыва: {res}", level="ERROR")
+                                client.seen_closed_orders.add(co['order_id'])
 
                 # Проверка новых отзывов
                 reviews = client.get_new_reviews()
