@@ -472,8 +472,6 @@ class FunPayClient:
                 
             for item in review_items:
                 try:
-                    review_id = item.get('data-id') or str(hash(item.text))
-                    
                     author_elem = item.find('div', class_='media-user-name') or item.find('div', class_='review-item-author')
                     author = author_elem.text.strip() if author_elem else "Unknown"
                     
@@ -482,6 +480,11 @@ class FunPayClient:
                     
                     stars = item.find_all('i', class_='fas fa-star')
                     rating = len(stars) if stars else 5
+                    
+                    # Генерируем стабильный ID на основе автора, оценки и текста (исключая меняющееся время)
+                    stable_str = f"{author}_{rating}_{text}"
+                    import hashlib
+                    review_id = item.get('data-id') or hashlib.md5(stable_str.encode('utf-8')).hexdigest()
                     
                     reviews.append({
                         'id': review_id,

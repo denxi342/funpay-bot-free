@@ -22,6 +22,12 @@ try:
 except ImportError:
     StatsManager = None
 
+try:
+    from web_api import run_server
+except ImportError:
+    run_server = None
+
+
 # Инициализация colorama
 init(autoreset=True)
 
@@ -159,6 +165,11 @@ def main():
         log("Telegram-бот не запущен (проверьте config.py).", level="WARNING")
 
     stats_manager_instance = StatsManager() if StatsManager else None
+    
+    if run_server and tg_manager:
+        log("Запуск WebApp сервера...", level="INFO")
+        run_server(client, tg_manager, stats_manager_instance)
+        
     log("Основной цикл мониторинга и автоподнятия запущен.", level="SUCCESS")
     
     NEXT_BREAK_TIME = time.time() + random.randint(7200, 14400)

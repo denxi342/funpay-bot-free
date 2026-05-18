@@ -74,6 +74,17 @@ class TelegramManager:
             "Выберите раздел для настройки:"
         )
         markup = InlineKeyboardMarkup(row_width=2)
+        
+        try:
+            from web_api import get_public_url
+            url = get_public_url()
+        except:
+            url = None
+            
+        if url and url.startswith("https"):
+            from telebot.types import WebAppInfo
+            markup.add(InlineKeyboardButton("🌐 Web Dashboard", web_app=WebAppInfo(url=url)))
+            
         markup.add(
             InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings"),
             InlineKeyboardButton("📦 Автовыдача", callback_data="menu_delivery"),
