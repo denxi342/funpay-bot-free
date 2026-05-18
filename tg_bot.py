@@ -3,6 +3,7 @@ from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 import time
 import json
 import os
+import requests
 from colorama import Fore
 from datetime import datetime
 
@@ -33,6 +34,7 @@ class TelegramManager:
             "auto_review_request": False,
             "review_text": "Спасибо за покупку! 🌟 Буду очень благодарен за 5 звезд в отзыве, это сильно поможет мне. Если оставишь хороший отзыв — дам бонус на следующий заказ!",
             "alarm_threshold": 0,
+            "auto_translate": True,
             "anti_scam": True,
             "delivery_configs": {},
             "needs_stats": False,
@@ -108,6 +110,7 @@ class TelegramManager:
             InlineKeyboardButton(f"{status('online_mode')} Вечный онлайн", callback_data="toggle_online_mode"),
             InlineKeyboardButton(f"{status('auto_respond')} ИИ Автоответчик", callback_data="toggle_auto_respond"),
             InlineKeyboardButton(f"{status('notifications')} Уведомления", callback_data="toggle_notifications"),
+            InlineKeyboardButton(f"{status('auto_translate')} Переводчик", callback_data="toggle_auto_translate"),
             InlineKeyboardButton(f"{status('anti_scam')} Anti-Scam (Риски)", callback_data="toggle_anti_scam")
         )
         markup.add(
@@ -174,7 +177,7 @@ class TelegramManager:
                 self.settings[key] = not self.settings.get(key, False)
                 self.save_settings()
                 # Возвращаемся в то же меню для обновления индикатора
-                if key in ["auto_bump", "online_mode", "auto_respond", "notifications", "auto_review_request", "anti_scam"]:
+                if key in ["auto_bump", "online_mode", "auto_respond", "notifications", "auto_review_request", "anti_scam", "auto_translate"]:
                     text, markup = self.get_settings_menu()
                 elif key == "auto_delivery":
                     text, markup = self.get_delivery_menu()
@@ -220,7 +223,7 @@ class TelegramManager:
             
             elif data.startswith("reply_"):
                 chat_id = data.replace("reply_", "")
-                msg = self.bot.send_message(call.message.chat.id, "📝 Введите ваше сообщение для отправки:")
+                msg = self.bot.send_message(call.message.chat.id, "📝 Введите сообщение для отправки:\n💡 <i>Лайфхак: Начните с <code>!en</code> чтобы бот перевел ваш текст на английский!</i>")
                 self.bot.register_next_step_handler(msg, self.process_manual_reply, chat_id)
                 
             elif data == "change_review_text":
@@ -252,9 +255,28 @@ class TelegramManager:
         text, markup = self.get_settings_menu()
         self.bot.send_message(self.admin_id, text, reply_markup=markup)
 
+    def translate_text(self, text, target_lang='ru'):
+        try:
+            url = "https://translate.googleapis.com/translate_a/single"
+            params = {"client": "gtx", "sl": "auto", "tl": target_lang, "dt": "t", "q": text}
+            resp = requests.get(url, params=params, timeout=5)
+            data = resp.json()
+            translated = "".join([s[0] for s in data[0]])
+            src_lang = data[2]
+            return translated, src_lang
+        except:
+            return text, "unknown"
+
     def process_manual_reply(self, message, chat_id):
         if not self.check_admin(message.from_user.id): return
         text = message.text
+        
+        if text.startswith("!en "):
+            original_text = text[4:]
+            translated_text, _ = self.translate_text(original_text, 'en')
+            text = translated_text
+            self.bot.send_message(self.admin_id, f"🇬🇧 <b>Переведено:</b>\n<i>{translated_text}</i>")
+            
         if 'pending_tasks' not in self.settings: self.settings['pending_tasks'] = []
         self.settings['pending_tasks'].append({'type': 'manual_reply', 'id': chat_id, 'text': text})
         self.save_settings()
@@ -323,13 +345,22 @@ class TelegramManager:
             return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
         user = escape(msg_data['user'])
-        text_content = escape(msg_data['text'])
+        text_content = msg_data['text']
+        
+        translated_block = ""
+        if self.settings.get('auto_translate'):
+            translated_text, src_lang = self.translate_text(text_content, 'ru')
+            if src_lang and src_lang != 'ru' and src_lang != 'unknown' and translated_text.lower() != text_content.lower():
+                translated_block = f"\n🇷🇺 <b>Перевод ({src_lang}):</b>\n<blockquote><i>{escape(translated_text)}</i></blockquote>\n"
+        
+        text_content = escape(text_content)
         
         text = (
             f"📩 <b>[НОВОЕ СООБЩЕНИЕ]</b>\n"
             f"————————————————\n"
             f"👤 <b>От:</b> <code>{user}</code>\n"
             f"📝 <b>Текст:</b>\n<blockquote><i>{text_content}</i></blockquote>\n"
+            f"{translated_block}"
         )
         
         u_info = msg_data.get('user_info')
